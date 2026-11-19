@@ -1,4 +1,4 @@
-# ShopCore — E-Commerce Demo with SRE
+# ShopCore — Self- Healing E-commerce
 
 A full-stack e-commerce app with a React frontend, a single FastAPI backend, full SRE observability (SLIs, SLOs, error budgets, burn-rate alerts), and a self-healing infrastructure pipeline.
 
