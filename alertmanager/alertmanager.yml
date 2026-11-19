@@ -1,0 +1,15 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: healer
+  group_by: [alertname]
+  group_wait:      10s   # wait 10s before firing (collect related alerts)
+  group_interval:  30s   # wait 30s before re-sending same group
+  repeat_interval: 5m    # don't spam the healer after recovery
+
+receivers:
+  - name: healer
+    webhook_configs:
+      - url: "http://healer:9001/webhook"
+        send_resolved: true   # healer also logs when alert clears

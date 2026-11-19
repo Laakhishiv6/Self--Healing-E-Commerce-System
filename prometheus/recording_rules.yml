@@ -1,0 +1,96 @@
+groups:
+
+  # ── SLI Recording Rules ──────────────────────────────────────────────────────
+  # Pre-computed SLI ratios exposed as named metrics.
+  # These appear in Prometheus/Grafana as clean time-series.
+
+  - name: sli_rules
+    interval: 30s
+    rules:
+
+      # ── 1. Availability ───────────────────────────────────────────────────────
+      # SLO: 99.9%  |  Error budget: 0.1%  |  ~8.7 hours/year downtime allowed
+      - record: sli:availability:ratio_1h
+        expr: avg_over_time(app_up[1h])
+
+      - record: sli:availability:ratio_6h
+        expr: avg_over_time(app_up[6h])
+
+      # ── 2. Request Success Rate ───────────────────────────────────────────────
+      # SLO: 99%  |  Error budget: 1%  |  ~7.3 hours/month allowed
+      # Success = any non-5xx response  (metrics endpoint excluded by middleware)
+      - record: sli:request_success_rate:ratio_5m
+        expr: |
+          sum(rate(app_requests_total{status!~"5.."}[5m]))
+          /
+          sum(rate(app_requests_total[5m]))
+
+      - record: sli:request_success_rate:ratio_1h
+        expr: |
+          sum(rate(app_requests_total{status!~"5.."}[1h]))
+          /
+          sum(rate(app_requests_total[1h]))
+
+      - record: sli:request_success_rate:ratio_6h
+        expr: |
+          sum(rate(app_requests_total{status!~"5.."}[6h]))
+          /
+          sum(rate(app_requests_total[6h]))
+
+      # ── 3. Latency ────────────────────────────────────────────────────────────
+      # SLO: 95% of requests served within 500ms
+      - record: sli:latency_ok:ratio_5m
+        expr: |
+          sum(rate(app_request_latency_seconds_bucket{le="0.5"}[5m]))
+          /
+          sum(rate(app_request_latency_seconds_count[5m]))
+
+      - record: sli:latency_ok:ratio_1h
+        expr: |
+          sum(rate(app_request_latency_seconds_bucket{le="0.5"}[1h]))
+          /
+          sum(rate(app_request_latency_seconds_count[1h]))
+
+      # ── 4. Payment Success Rate ───────────────────────────────────────────────
+      # SLO: 99.5%  |  Error budget: 0.5%  |  ~3.6 hours/month allowed
+      - record: sli:payment_success_rate:ratio_5m
+        expr: |
+          sum(rate(payment_total{status="success"}[5m]))
+          /
+          sum(rate(payment_total[5m]))
+
+      - record: sli:payment_success_rate:ratio_1h
+        expr: |
+          sum(rate(payment_total{status="success"}[1h]))
+          /
+          sum(rate(payment_total[1h]))
+
+      - record: sli:payment_success_rate:ratio_6h
+        expr: |
+          sum(rate(payment_total{status="success"}[6h]))
+          /
+          sum(rate(payment_total[6h]))
+
+
+  # ── Error Budget Burn Rate Rules ─────────────────────────────────────────────
+  # Burn rate = how many times faster than allowed we're draining the error budget.
+  # Burn rate of 1 = exactly on-track to exhaust budget at end of period.
+  # Burn rate of 14.4 = will exhaust 30-day budget in 2 days.
+
+  - name: error_budget_rules
+    interval: 30s
+    rules:
+
+      # Request success rate burn rate (SLO: 99% → error budget: 1%)
+      - record: slo:request_success_rate:burn_rate_1h
+        expr: (1 - sli:request_success_rate:ratio_1h) / (1 - 0.99)
+
+      - record: slo:request_success_rate:burn_rate_6h
+        expr: (1 - sli:request_success_rate:ratio_6h) / (1 - 0.99)
+
+      # Payment success rate burn rate (SLO: 99.5% → error budget: 0.5%)
+      - record: slo:payment_success_rate:burn_rate_1h
+        expr: (1 - sli:payment_success_rate:ratio_1h) / (1 - 0.995)
+
+      - record: slo:payment_success_rate:burn_rate_6h
+        expr: (1 - sli:payment_success_rate:ratio_6h) / (1 - 0.995)

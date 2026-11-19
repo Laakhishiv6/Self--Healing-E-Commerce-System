@@ -1,0 +1,105 @@
+groups:
+
+  # ── SLO Breach Alerts ────────────────────────────────────────────────────────
+  # These fire when the system is violating its SLOs.
+  # Uses multi-window burn rate detection (Google SRE approach):
+  #   Fast burn  (14.4x) — depletes 30-day budget in 2 days  → page immediately
+  #   Slow burn  (6x)    — depletes 30-day budget in 5 days  → page to investigate
+  #
+  # Both windows must exceed the threshold to reduce false positives.
+
+  - name: slo_alerts
+    rules:
+
+      # ── 1. Availability SLO: 99.9% ───────────────────────────────────────────
+      # app_up has dropped — direct breach, no burn rate needed
+      - alert: SLOBreach_Availability
+        expr: sli:availability:ratio_1h < 0.999
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          slo_target: "99.9%"
+        annotations:
+          summary: "SLO breach — Availability below 99.9%"
+          description: "1h availability is {{ $value | humanizePercentage }}. SLO target is 99.9%."
+
+      # ── 2. Request Success Rate SLO: 99% ─────────────────────────────────────
+
+      # Fast burn: error rate is 14.4x the budget → depletes monthly budget in ~2 days
+      - alert: SLOBreach_RequestSuccess_FastBurn
+        expr: |
+          slo:request_success_rate:burn_rate_1h > 14.4
+          and
+          (1 - sli:request_success_rate:ratio_5m) / (1 - 0.99) > 14.4
+        for: 2m
+        labels:
+          severity: critical
+          slo: request_success_rate
+          slo_target: "99%"
+          burn_rate: fast
+        annotations:
+          summary: "CRITICAL — Request success SLO burning fast (14.4x)"
+          description: "1h burn rate is {{ $value | humanize }}x. Monthly error budget depletes in ~2 days."
+
+      # Slow burn: error rate is 6x the budget → depletes in ~5 days
+      - alert: SLOBreach_RequestSuccess_SlowBurn
+        expr: |
+          slo:request_success_rate:burn_rate_6h > 6
+          and
+          slo:request_success_rate:burn_rate_1h > 6
+        for: 15m
+        labels:
+          severity: warning
+          slo: request_success_rate
+          slo_target: "99%"
+          burn_rate: slow
+        annotations:
+          summary: "WARNING — Request success SLO burning slowly (6x)"
+          description: "6h burn rate is {{ $value | humanize }}x. Monthly error budget depletes in ~5 days."
+
+      # ── 3. Latency SLO: 95% of requests within 500ms ─────────────────────────
+      - alert: SLOBreach_Latency
+        expr: sli:latency_ok:ratio_1h < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+          slo_target: "95% within 500ms"
+        annotations:
+          summary: "SLO breach — Latency SLO violated"
+          description: "Only {{ $value | humanizePercentage }} of requests served within 500ms over 1h. SLO is 95%."
+
+      # ── 4. Payment Success Rate SLO: 99.5% ───────────────────────────────────
+
+      # Fast burn
+      - alert: SLOBreach_PaymentSuccess_FastBurn
+        expr: |
+          slo:payment_success_rate:burn_rate_1h > 14.4
+          and
+          (1 - sli:payment_success_rate:ratio_5m) / (1 - 0.995) > 14.4
+        for: 2m
+        labels:
+          severity: critical
+          slo: payment_success_rate
+          slo_target: "99.5%"
+          burn_rate: fast
+        annotations:
+          summary: "CRITICAL — Payment SLO burning fast (14.4x)"
+          description: "Payment error budget burn rate is {{ $value | humanize }}x. Monthly budget depletes in ~2 days."
+
+      # Slow burn
+      - alert: SLOBreach_PaymentSuccess_SlowBurn
+        expr: |
+          slo:payment_success_rate:burn_rate_6h > 6
+          and
+          slo:payment_success_rate:burn_rate_1h > 6
+        for: 15m
+        labels:
+          severity: warning
+          slo: payment_success_rate
+          slo_target: "99.5%"
+          burn_rate: slow
+        annotations:
+          summary: "WARNING — Payment SLO burning slowly (6x)"
+          description: "Payment error budget 6h burn rate is {{ $value | humanize }}x. Monthly budget depletes in ~5 days."

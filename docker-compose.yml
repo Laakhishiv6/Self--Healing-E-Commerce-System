@@ -1,0 +1,106 @@
+version: "3.9"
+
+services:
+  # ── Application ────────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8001"
+    networks:
+      - shopnet
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - shopnet
+
+  # ── Self-Healer ────────────────────────────────────────────────────────────
+  healer:
+    build: ./healer
+    ports:
+      - "9001:9001"
+    networks:
+      - shopnet
+    restart: unless-stopped
+
+  # ── Observability ──────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - ./prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml
+      - ./prometheus/slo_alerts.yml:/etc/prometheus/slo_alerts.yml
+    networks:
+      - shopnet
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1h"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    networks:
+      - shopnet
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - shopnet
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:2.9.9
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - shopnet
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.9
+    volumes:
+      - ./loki/promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - shopnet
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+networks:
+  shopnet:
+    driver: bridge

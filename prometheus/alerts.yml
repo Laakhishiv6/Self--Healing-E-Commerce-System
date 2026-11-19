@@ -1,0 +1,62 @@
+groups:
+  - name: shopcore
+    rules:
+
+      # Fires when the backend marks itself as down (app_up == 0)
+      - alert: ServiceDown
+        expr: app_up == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "ShopCore backend is down"
+          description: "app_up has been 0 for more than 10 seconds."
+
+      # Fires when more than 30% of requests are returning 5xx errors
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(app_requests_total{status=~"5.."}[1m]))
+          /
+          sum(rate(app_requests_total[1m])) > 0.3
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate"
+          description: "More than 30% of requests are returning 5xx errors for 15s."
+
+      # Fires when payment gateway is down
+      - alert: PaymentGatewayDown
+        expr: payment_gateway_up == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment gateway is down"
+          description: "payment_gateway_up has been 0 for 10+ seconds — all payments failing."
+
+      # Fires when more than 50% of payments are failing
+      - alert: HighPaymentFailureRate
+        expr: |
+          sum(rate(payment_total{status="failed"}[1m]))
+          /
+          sum(rate(payment_total[1m])) > 0.5
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "High payment failure rate"
+          description: "More than 50% of payments are failing for 15s."
+
+      # Fires when P99 latency exceeds 1 second
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(app_request_latency_seconds_bucket[1m]))
+          ) > 1
+        for: 20s
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 latency"
+          description: "P99 request latency is above 1s for 20 seconds."
